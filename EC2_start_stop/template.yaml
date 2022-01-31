@@ -12,15 +12,15 @@ Parameters:
     Description: Default AMI is a free tier linux.
 Globals:
   Function:
-    Timeout: 10
+    Timeout: 30
 
 Resources:
-#EC2 security group
+  #EC2 security group
   EC2SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties: 
       GroupDescription: for start and stop
-
+  #EC2
   EC2forStartStop:
     Type: 'AWS::EC2::Instance'
     Properties:
@@ -57,82 +57,70 @@ Resources:
               Version: '2012-10-17'
               Statement:
               - Effect: Allow
-                Action:
-                  - 'ec2:*'
-                Resource: !Ref StartEC2function
+                Action: 'ec2:*'
+                Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}*"
           - PolicyName: ec2-access-stop
             PolicyDocument:
               Version: '2012-10-17'
               Statement:
               - Effect: Allow
-                Action:
-                  - 'ec2:*'
-                Resource: !Ref StopEC2function
+                Action: 'ec2:*'
+                Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}*"
 
-#lambda function that starts ec2
+  #lambda function that starts ec2
   StartEC2function:
     Type: AWS::Serverless::Function
     Properties:
+      MemorySize: 128
       CodeUri: EC2_lambda/
       Handler: start_ec2.lambda_handler
       Runtime: python3.9
       Role: !Ref EC2Accessrole
-      Events: 
-         Properties:
-            EventBusName: !Ref ScheduledRule
-            Input: '{}'
-         Type: CloudWatchEvent
 
-#lambda functions that stops ec2
+  #lambda functions that stops ec2
   StopEC2function:
     Type: AWS::Serverless::Function
     Properties:
+      MemorySize: 128
       CodeUri: EC2_lambda/
       Handler: stop_ec2.lambda_handler
       Runtime: python3.9
       Role: !Ref EC2Accessrole
-      Events: 
-         Properties:
-            EventBusName: !Ref ScheduledRule
-            Input: '{}'
-         Type: CloudWatchEvent
 
-#EventbusRule
-ScheduledRule: 
-  Type: AWS::Events::Rule
-  Properties: 
-    Description: "ScheduledRule"
-    ScheduleExpression: "2"
-    State: "ENABLED"
-    Targets: !Ref StartEC2function
+  #EventbusRule
+  #4:35 PM (UTC) every day
+  ScheduledRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      ScheduleExpression: "cron(35 16 * * ? *)"
+      EventPattern: { "version": "0", "id": "6a7e8feb-b491-4cf7-a9f1-bf3703467718", "detail-type": "EC2 Instance State-change Notification", "source": "aws.ec2", "account": "111122223333", "time": "2017-12-22T18:43:48Z", "region": "us-west-1", "resources": [ "arn:aws:ec2:us-west-1:123456789012:instance/i-1234567890abcdef0" ], "detail": { "instance-id": " i-1234567890abcdef0", "state": "terminated" } }
+      Targets:
+          - Arn: !GetAtt StartEC2function.Arn
+            Id: '1'
 
-#Eventbus permisions
-PermissionForEventsToInvokeLambda: 
-  Type: AWS::Lambda::Permission
-  Properties: 
-    FunctionName: !Ref "StartEC2function"
-    Action: "lambda:InvokeFunction"
-    Principal: "events.amazonaws.com"
-    SourceArn: 
-      Fn::GetAtt: 
-        - "ScheduledRule"
-        - "Arn"
+  #4:40 PM (UTC) every day
+  ScheduledRule2: 
+    Type: AWS::Events::Rule
+    Properties: 
+      ScheduleExpression: "cron(40 16 * * ? *)"
+      EventPattern: { "version": "0", "id": "6a7e8feb-b491-4cf7-a9f1-bf3703467718", "detail-type": "EC2 Instance State-change Notification", "source": "aws.ec2", "account": "111122223333", "time": "2017-12-22T18:43:48Z", "region": "us-west-1", "resources": [ "arn:aws:ec2:us-west-1:123456789012:instance/i-1234567890abcdef0" ], "detail": { "instance-id": " i-1234567890abcdef0", "state": "terminated" } }
+      Targets:
+          - Arn: !GetAtt StopEC2function.Arn
+            Id: '2'
 
-ScheduledRule2: 
-  Type: AWS::Events::Rule
-  Properties: 
-    Description: "ScheduledRule2"
-    ScheduleExpression: "3"
-    State: "ENABLED"
-    Targets: !Ref StopEC2function
+  #Eventbus permisions
+  PermissionForEventsToInvokeLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !GetAtt StartEC2function.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ScheduledRule.Arn
 
-PermissionForEventsToInvokeLambda2: 
-  Type: AWS::Lambda::Permission
-  Properties: 
-    FunctionName: !Ref "StopEC2function"
-    Action: "lambda:InvokeFunction"
-    Principal: "events.amazonaws.com"
-    SourceArn: 
-      Fn::GetAtt: 
-        - "ScheduledRule2"
-        - "Arn"
+  PermissionForEventsToInvokeLambda2: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !GetAtt StopEC2function.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ScheduledRule2.Arn
