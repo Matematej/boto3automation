@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Creates EC2 instances and starts and stops them scheduled
+Description: Creates EC2 instances and starts and stops them periodically
 Parameters:
   InstanceType:
     Type: String
@@ -10,14 +10,18 @@ Parameters:
     Type: String
     Default: ami-0a8b4cd432b1c3063
     Description: Default AMI is a free tier linux.
-
 Globals:
   Function:
     Timeout: 10
 
 Resources:
-#EC2s
-  EC2_forStart/stop:
+#EC2 security group
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: for start and stop
+
+  EC2forStartStop:
     Type: 'AWS::EC2::Instance'
     Properties:
       ImageId: !Ref AMI
@@ -28,45 +32,14 @@ Resources:
           Ebs:
             VolumeSize: 8
       SecurityGroupIds:
-        - Ref: InstanceSecurityGroup
+        - Ref: EC2SecurityGroup
       Tags:
         -
           Key: test_id
           Value: start-stop
 
-#lambda function that starts ec2
-  StartEC2_function:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: EC2_lambda/
-      Handler: start_ec2.lambda_handler
-      Runtime: python3.9
-      Role: !GetAtt EC2_Access_role.Arn
-      Events:
-        start:
-          Type: Api
-          Properties:
-            Path: /start
-            Method: post
-
-#lambda functions that stops ec2
-  StopEC2_function:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: EC2_lambda/
-      Handler: stop_ec2.lambda_handler
-      Runtime: python3.9
-      Role: !GetAtt EC2_Access_role.Arn
-      Events:
-        stop:
-          Type: Api
-          Properties:
-            Path: /stop
-            Method: post
-
-
-#IAM role for start and stop lambdas
-  EC2_Access_role:
+  #IAM role for start and stop lambdas
+  EC2Accessrole:
       Type: AWS::IAM::Role
       Properties:
         AssumeRolePolicyDocument:
@@ -86,7 +59,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - 'ec2:*'
-                Resource: !GetAtt StartEC2_function.Arn
+                Resource: !Ref StartEC2function
           - PolicyName: ec2-access-stop
             PolicyDocument:
               Version: '2012-10-17'
@@ -94,16 +67,72 @@ Resources:
               - Effect: Allow
                 Action:
                   - 'ec2:*'
-                Resource: !GetAtt StopEC2_function.Arn
+                Resource: !Ref StopEC2function
 
+#lambda function that starts ec2
+  StartEC2function:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: EC2_lambda/
+      Handler: start_ec2.lambda_handler
+      Runtime: python3.9
+      Role: !Ref EC2Accessrole
+      Events: 
+         Properties:
+            EventBusName: !Ref ScheduledRule
+            Input: '{}'
+         Type: CloudWatchEvent
 
-Outputs:
-  HelloWorldApi:
-    Description: "API Gateway endpoint URL for Prod stage for Hello World function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
-  HelloWorldFunction:
-    Description: "Hello World Lambda Function ARN"
-    Value: !GetAtt HelloWorldFunction.Arn
-  HelloWorldFunctionIamRole:
-    Description: "Implicit IAM Role created for Hello World function"
-    Value: !GetAtt HelloWorldFunctionRole.Arn
+#lambda functions that stops ec2
+  StopEC2function:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: EC2_lambda/
+      Handler: stop_ec2.lambda_handler
+      Runtime: python3.9
+      Role: !Ref EC2Accessrole
+      Events: 
+         Properties:
+            EventBusName: !Ref ScheduledRule
+            Input: '{}'
+         Type: CloudWatchEvent
+
+#EventbusRule
+ScheduledRule: 
+  Type: AWS::Events::Rule
+  Properties: 
+    Description: "ScheduledRule"
+    ScheduleExpression: "2"
+    State: "ENABLED"
+    Targets: !Ref StartEC2function
+
+#Eventbus permisions
+PermissionForEventsToInvokeLambda: 
+  Type: AWS::Lambda::Permission
+  Properties: 
+    FunctionName: !Ref "StartEC2function"
+    Action: "lambda:InvokeFunction"
+    Principal: "events.amazonaws.com"
+    SourceArn: 
+      Fn::GetAtt: 
+        - "ScheduledRule"
+        - "Arn"
+
+ScheduledRule2: 
+  Type: AWS::Events::Rule
+  Properties: 
+    Description: "ScheduledRule2"
+    ScheduleExpression: "3"
+    State: "ENABLED"
+    Targets: !Ref StopEC2function
+
+PermissionForEventsToInvokeLambda2: 
+  Type: AWS::Lambda::Permission
+  Properties: 
+    FunctionName: !Ref "StopEC2function"
+    Action: "lambda:InvokeFunction"
+    Principal: "events.amazonaws.com"
+    SourceArn: 
+      Fn::GetAtt: 
+        - "ScheduledRule2"
+        - "Arn"

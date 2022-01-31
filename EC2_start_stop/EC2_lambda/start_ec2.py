@@ -6,7 +6,7 @@ ec2 = boto3.resource('ec2')
 ec2_filter={'Name': 'teg:test_id','Values': ['start-stop']}
 def lambda_handler(event, context):
     for each in ec2.instances.filter(Filters=[ec2_filter]):
-        print(each)
+        each.start()
 
     return {
         "statusCode": 200,

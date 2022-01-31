@@ -1,0 +1,11 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "EC2StartStop"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-184z7f4rqkz1u"
+s3_prefix = "EC2StartStop"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "InstanceType=\"t2.micro\" AMI=\"ami-0a8b4cd432b1c3063\""
