@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Creates EC2 instances and starts and stops them scheduled
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    Description: Enter instance size. Default is t2.micro.
+  AMI:
+    Type: String
+    Default: ami-0a8b4cd432b1c3063
+    Description: Default AMI is a free tier linux.
+
+Globals:
+  Function:
+    Timeout: 10
+
+Resources:
+#EC2s
+  EC2_forStart/stop:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: !Ref AMI
+      InstanceType:
+        Ref: InstanceType
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 8
+      SecurityGroupIds:
+        - Ref: InstanceSecurityGroup
+      Tags:
+        -
+          Key: test_id
+          Value: start-stop
+
+#lambda function that starts ec2
+  StartEC2_function:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: EC2_lambda/
+      Handler: start_ec2.lambda_handler
+      Runtime: python3.9
+      Role: !GetAtt EC2_Access_role.Arn
+      Events:
+        start:
+          Type: Api
+          Properties:
+            Path: /start
+            Method: post
+
+#lambda functions that stops ec2
+  StopEC2_function:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: EC2_lambda/
+      Handler: stop_ec2.lambda_handler
+      Runtime: python3.9
+      Role: !GetAtt EC2_Access_role.Arn
+      Events:
+        stop:
+          Type: Api
+          Properties:
+            Path: /stop
+            Method: post
+
+
+#IAM role for start and stop lambdas
+  EC2_Access_role:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - lambda.amazonaws.com
+            Action:
+            - sts:AssumeRole
+        Policies:
+          - PolicyName: ec2-access-start
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+              - Effect: Allow
+                Action:
+                  - 'ec2:*'
+                Resource: !GetAtt StartEC2_function.Arn
+          - PolicyName: ec2-access-stop
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+              - Effect: Allow
+                Action:
+                  - 'ec2:*'
+                Resource: !GetAtt StopEC2_function.Arn
+
+
+Outputs:
+  HelloWorldApi:
+    Description: "API Gateway endpoint URL for Prod stage for Hello World function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
+  HelloWorldFunction:
+    Description: "Hello World Lambda Function ARN"
+    Value: !GetAtt HelloWorldFunction.Arn
+  HelloWorldFunctionIamRole:
+    Description: "Implicit IAM Role created for Hello World function"
+    Value: !GetAtt HelloWorldFunctionRole.Arn
