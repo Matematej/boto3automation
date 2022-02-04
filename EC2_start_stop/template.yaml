@@ -23,7 +23,7 @@ Parameters:
 
 Globals:
   Function:
-    Timeout: 10
+    Timeout: 300
 
 Resources:
   InstanceSecurityGroup:
@@ -56,13 +56,17 @@ Resources:
       CodeUri: EC2_lambda/
       Handler: start_ec2.lambda_handler
       Runtime: python3.9
+      Environment:
+        Variables:
+          SNSARN: !Ref AlarmTopic
       Events:
         startec2event:
           Type: Schedule
           Properties:
-            Schedule: cron(10 20 * * ? *)
+            Schedule: cron(10 22 * * ? *)
       Policies:
       - Statement:
+        - Sid: StartEC2
           Effect: Allow
           Action:
               - ec2:*
@@ -70,7 +74,12 @@ Resources:
           Condition:
             StringEquals:
               ec2:Region: us-east-1
-
+        - Sid: SNSPublish
+          Effect: Allow
+          Action:
+              - sns:*
+          Resource: '*'
+                
   #lambda functions that stops ec2
   StopEC2function:
     Type: AWS::Serverless::Function
@@ -79,13 +88,17 @@ Resources:
       CodeUri: EC2_lambda/
       Handler: stop_ec2.lambda_handler
       Runtime: python3.9
+      Environment:
+        Variables:
+          SNSARN: !Ref AlarmTopic
       Events:
         stopec2event:
           Type: Schedule
           Properties:
-            Schedule: cron(15 20 * * ? *)
+            Schedule: cron(15 23 * * ? *)
       Policies:
       - Statement:
+        - Sid: StopEC2
           Effect: Allow
           Action:
               - ec2:*
@@ -93,6 +106,11 @@ Resources:
           Condition:
             StringEquals:
               ec2:Region: us-east-1
+        - Sid: SNSPublish
+          Effect: Allow
+          Action:
+              - sns:*
+          Resource: '*'
 
   #SNS email
   AlarmTopic:
@@ -102,37 +120,6 @@ Resources:
       - Protocol: email
         Endpoint: !Ref NotificationEmail
 
-  AlarmStart:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      EvaluationPeriods: 1
-      MetricName: Errors
-      Namespace: AWS/Lambda
-      Period: 60
-      Statistic: Sum
-      Threshold: '1'
-      AlarmActions:
-        - !Ref AlarmTopic
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      Dimensions:
-        - Name: FunctionName
-          Value: !Ref StartEC2function
-
-  AlarmStop:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      EvaluationPeriods: 1
-      MetricName: Errors
-      Namespace: AWS/Lambda
-      Period: 60
-      Statistic: Sum
-      Threshold: '1'
-      AlarmActions:
-        - !Ref AlarmTopic
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      Dimensions:
-        - Name: FunctionName
-          Value: !Ref StopEC2function
 Outputs:
   InstanceId:
     Description: InstanceId of the newly created EC2 instance
